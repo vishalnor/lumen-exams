@@ -1,0 +1,6 @@
+{
+  "name": "Lumen AI Exam Proctoring System",
+  "description": "AI-Based Online Exam Proctoring System with browser-level tab-switch detection, server-authoritative timer, automated scoring, and comprehensive admin proctoring reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
