@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Lock, Mail, ArrowRight, UserPlus, Sparkles, AlertCircle } from 'lucide-react';
+import { ArrowRight, AlertCircle } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (email: string, password: string) => Promise<void>;
@@ -7,6 +7,7 @@ interface LoginScreenProps {
   loading: boolean;
   error: string | null;
   clearError: () => void;
+  onTakeExamDirectly?: () => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
@@ -15,175 +16,113 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   loading,
   error,
   clearError,
+  onTakeExamDirectly,
 }) => {
   const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('vikas@student.edu');
-  const [password, setPassword] = useState('Student@123');
+  const [email, setEmail] = useState('admin@lumen.edu');
+  const [password, setPassword] = useState('Admin@123');
   const [fullName, setFullName] = useState('Vikas Chaurasiya');
-  const [role, setRole] = useState<'student' | 'admin'>('student');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
     if (isRegister) {
-      await onRegister(fullName, email, password, role);
+      await onRegister(fullName, email, password, 'admin');
     } else {
       await onLogin(email, password);
     }
   };
 
-  const setPresetUser = (presetEmail: string, presetPass: string, presetRole: 'student' | 'admin') => {
-    setEmail(presetEmail);
-    setPassword(presetPass);
-    setRole(presetRole);
-    setIsRegister(false);
-    clearError();
-  };
-
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 overflow-hidden">
-      {/* Ambient background glows matching Figure P.1 */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-gradient-to-tr from-indigo-200/50 via-purple-200/40 to-blue-200/40 rounded-full blur-3xl pointer-events-none -z-10" />
-      <div className="absolute bottom-10 right-10 w-[350px] h-[350px] bg-indigo-100/60 rounded-full blur-2xl pointer-events-none -z-10" />
+    <div className="relative min-h-[calc(100vh-2rem)] flex items-center justify-center p-4">
+      {/* Exact ambient orbs matching screenshots */}
+      <div className="lumen-ambient-bg">
+        <div className="lumen-orb-left" />
+        <div className="lumen-orb-right" />
+        <div className="lumen-orb-center" />
+      </div>
 
-      <div className="w-full max-w-md">
-        {/* Card matching Figure P.1 exactly */}
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-8 sm:p-9 shadow-xl shadow-indigo-500/5 border border-white/80 ring-1 ring-slate-100 transition-all">
+      <div className="relative z-10 w-full max-w-md">
+        {/* Card matching IMG-20261101-WA0023_19fc07c9.jpg exactly */}
+        <div className="bg-white rounded-[28px] sm:rounded-[32px] p-6 sm:p-10 shadow-[0_10px_35px_rgba(93,95,239,0.06)] border border-slate-100">
           
-          {/* Logo & Brand Header */}
-          <div className="flex flex-col items-center text-center mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 mb-3">
-              <ShieldCheck className="w-6 h-6" />
+          {/* Logo with purple circle dot */}
+          <div className="flex items-center space-x-2.5 mb-8">
+            <div className="w-7 h-7 rounded-full bg-white border border-slate-200/90 flex items-center justify-center shadow-xs shrink-0">
+              <div className="w-3.5 h-3.5 rounded-full bg-[#5d5fef]" />
             </div>
-            <div className="flex items-center space-x-1.5 mb-1">
-              <span className="font-bold text-xl text-slate-900 tracking-tight">Lumen</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 uppercase tracking-wide">
-                EXAMS
-              </span>
+            <div>
+              <div className="text-sm font-black text-slate-900 tracking-tight leading-none whitespace-nowrap">Lumen</div>
+              <div className="text-[9px] font-bold text-slate-400 tracking-widest mt-0.5 whitespace-nowrap">EXAMS</div>
             </div>
-            <span className="text-xs uppercase tracking-widest font-semibold text-indigo-600 mt-2">
-              {isRegister ? 'CREATE ACCOUNT' : 'WELCOME BACK'}
-            </span>
-            <h1 className="text-xl font-bold text-slate-900 mt-1">
-              {isRegister ? 'Register your examination account' : 'Sign in to your console'}
-            </h1>
           </div>
 
-          {/* Error Notice (plain-language error handling per SRS FR-AUTH-02) */}
+          {/* Heading */}
+          <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400 block mb-1">
+            {isRegister ? 'CREATE ADMIN ACCOUNT' : 'WELCOME BACK'}
+          </span>
+          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mb-6">
+            {isRegister ? 'Register your console' : 'Sign in to your console'}
+          </h1>
+
           {error && (
-            <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start space-x-2 animate-in fade-in duration-200">
+            <div className="mb-4 p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start space-x-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3.5">
             {isRegister && (
-              <>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Vikas Chaurasiya"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Account Role
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setRole('student')}
-                      className={`py-2 text-xs font-medium rounded-lg border transition-all ${
-                        role === 'student'
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold'
-                          : 'border-slate-200 bg-white text-slate-600'
-                      }`}
-                    >
-                      Student
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRole('admin')}
-                      className={`py-2 text-xs font-medium rounded-lg border transition-all ${
-                        role === 'admin'
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-semibold'
-                          : 'border-slate-200 bg-white text-slate-600'
-                      }`}
-                    >
-                      Administrator
-                    </button>
-                  </div>
-                </div>
-              </>
+              <div>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Full name"
+                  className="w-full px-5 py-3.5 rounded-full bg-[#f8faff] text-xs font-medium border border-transparent focus:bg-white focus:border-[#5d5fef] focus:outline-none transition-all placeholder:text-slate-400 shadow-2xs"
+                />
+              </div>
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@institution.edu"
-                  className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              </div>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className="w-full px-5 py-3.5 rounded-full bg-[#f8faff] text-xs font-medium border border-transparent focus:bg-white focus:border-[#5d5fef] focus:outline-none transition-all placeholder:text-slate-400 shadow-2xs"
+              />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/50 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                />
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-              </div>
-              {isRegister && (
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Policy: Minimum 8 characters with mixed case and numeric digit.
-                </p>
-              )}
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className="w-full px-5 py-3.5 rounded-full bg-[#f8faff] text-xs font-medium border border-transparent focus:bg-white focus:border-[#5d5fef] focus:outline-none transition-all placeholder:text-slate-400 shadow-2xs"
+              />
             </div>
 
-            {/* Gradient Sign In Button matching Figure P.1 */}
+            {/* Pill Sign In Button matching screenshot */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-indigo-600 via-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-md shadow-indigo-600/25 active:scale-[0.99] disabled:opacity-70 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+              className="w-full rounded-full py-3.5 px-6 text-xs font-bold text-white bg-gradient-to-r from-[#5d5fef] to-[#6c5ce7] hover:opacity-95 shadow-md shadow-[#5d5fef]/20 transition-all flex items-center justify-center space-x-2 cursor-pointer mt-2 whitespace-nowrap"
             >
               {loading ? (
-                <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
               ) : (
-                <>
-                  <span>{isRegister ? 'Create Account' : 'Sign in'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
+                <span className="whitespace-nowrap">{isRegister ? 'Create Account' : 'Sign in'}</span>
               )}
             </button>
           </form>
 
-          {/* Toggle between Login and Register */}
+          {/* Toggle link matching screenshot */}
           <div className="mt-5 text-center">
             <button
               type="button"
@@ -191,46 +130,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 setIsRegister(!isRegister);
                 clearError();
               }}
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors"
+              className="text-xs font-medium text-[#5d5fef] hover:underline transition-colors whitespace-nowrap cursor-pointer"
             >
-              {isRegister ? 'Already have an account? Sign in' : 'No account? Create one'}
+              <span className="whitespace-nowrap">{isRegister ? 'Already have an account? Sign in' : 'No account? Create one'}</span>
             </button>
           </div>
 
-          {/* One-click quick login presets for evaluators */}
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider text-center mb-2.5">
-              Instant Demo Access
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+          {/* Direct link for candidate taking exam */}
+          {onTakeExamDirectly && (
+            <div className="mt-6 pt-4 border-t border-slate-100 text-center">
               <button
                 type="button"
-                onClick={() => setPresetUser('vikas@student.edu', 'Student@123', 'student')}
-                className="p-2 rounded-xl bg-slate-50 hover:bg-indigo-50/80 border border-slate-200/70 hover:border-indigo-200 text-left transition-all group"
+                onClick={onTakeExamDirectly}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors inline-flex items-center space-x-1 whitespace-nowrap cursor-pointer"
               >
-                <div className="font-semibold text-slate-800 group-hover:text-indigo-700">
-                  Student Portal
-                </div>
-                <div className="text-[10px] text-slate-500">Vikas Chaurasiya</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPresetUser('admin@lumen.edu', 'Admin@123', 'admin')}
-                className="p-2 rounded-xl bg-slate-50 hover:bg-purple-50/80 border border-slate-200/70 hover:border-purple-200 text-left transition-all group"
-              >
-                <div className="font-semibold text-slate-800 group-hover:text-purple-700">
-                  Admin Console
-                </div>
-                <div className="text-[10px] text-slate-500">Question Bank & Reports</div>
+                <span className="whitespace-nowrap">Take exam via student link</span>
+                <span className="shrink-0">&rarr;</span>
               </button>
             </div>
-          </div>
+          )}
 
-        </div>
-
-        {/* Project Footer Badge */}
-        <div className="mt-4 text-center text-xs text-slate-500 font-medium">
-          Thakur Ramnarayan College of Arts & Commerce &bull; Computer Science Dept.
         </div>
       </div>
     </div>

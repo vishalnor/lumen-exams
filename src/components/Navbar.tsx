@@ -38,6 +38,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 uppercase tracking-wider">
                   EXAMS
                 </span>
+                <span className="hidden md:inline-flex items-center space-x-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>Firebase</span>
+                </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
                 AI-Based Online Exam Proctoring System

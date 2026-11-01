@@ -1,1 +1,60 @@
 @import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #f6f8fd;
+    color: #1e293b;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Ambient glowing orbs background matching user's screenshots exactly */
+.lumen-ambient-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.lumen-orb-left {
+  position: absolute;
+  top: 5%;
+  left: -10%;
+  width: 550px;
+  height: 550px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(199, 210, 254, 0.55) 0%, rgba(224, 231, 255, 0.25) 50%, rgba(246, 248, 253, 0) 70%);
+  filter: blur(50px);
+}
+
+.lumen-orb-right {
+  position: absolute;
+  top: 20%;
+  right: -8%;
+  width: 580px;
+  height: 580px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(233, 213, 255, 0.6) 0%, rgba(243, 232, 255, 0.25) 50%, rgba(246, 248, 253, 0) 70%);
+  filter: blur(60px);
+}
+
+.lumen-orb-center {
+  position: absolute;
+  bottom: -15%;
+  left: 30%;
+  width: 600px;
+  height: 600px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(186, 230, 253, 0.5) 0%, rgba(224, 242, 254, 0.2) 50%, rgba(246, 248, 253, 0) 70%);
+  filter: blur(65px);
+}
+
+/* Custom switch toggle */
+.toggle-checkbox:checked {
+  right: 0;
+  border-color: #5d5fef;
+}
+.toggle-checkbox:checked + .toggle-label {
+  background-color: #5d5fef;
+}

@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { GoogleGenAI } from '@google/genai';
 import { Question, Exam, ExamAttempt, Violation, ConsolidatedReportRow, TestCaseResult } from './src/types';
 
 dotenv.config();
@@ -13,6 +14,16 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+
+// Initialize GoogleGenAI SDK client (server-side)
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  httpOptions: {
+    headers: {
+      'User-Agent': 'aistudio-build',
+    },
+  },
+});
 
 // Parsers: handle json, text (for navigator.sendBeacon) and urlencoded
 app.use(express.json());
@@ -155,23 +166,35 @@ const questions: Question[] = [
 const exams: Exam[] = [
   {
     id: 'exam-cyber',
-    title: 'Cybersecurity & Web Defense',
+    title: 'Cyber',
     description: 'Assessment covering social engineering, network security, and secure application protocols.',
+    instructions: 'Answer all multiple-choice questions.',
     durationMinutes: 30,
+    passingScore: 0,
+    maxAttempts: 1,
+    allowedTabSwitches: 1,
+    showResultAfterSubmission: true,
+    autoSubmitOnTabLimit: false,
     availableFrom: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
     availableTo: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-    questionIds: ['q-1', 'q-2', 'q-3', 'q-4'],
+    questionIds: ['q-1', 'q-2', 'q-3'],
     createdBy: 'user-admin-1',
     status: 'published',
   },
   {
     id: 'exam-webtech',
-    title: 'Web Technologies & Architecture',
+    title: 'web tech',
     description: 'Evaluation of client-server models, HTTP protocol specifications, and modern browser APIs.',
-    durationMinutes: 5,
+    instructions: 'Answer all multiple-choice questions.',
+    durationMinutes: 30,
+    passingScore: 0,
+    maxAttempts: 1,
+    allowedTabSwitches: 1,
+    showResultAfterSubmission: true,
+    autoSubmitOnTabLimit: false,
     availableFrom: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
     availableTo: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-    questionIds: ['q-2', 'q-4', 'q-5'],
+    questionIds: ['q-2', 'q-4', 'q-5', 'q-1', 'q-3'],
     createdBy: 'user-admin-1',
     status: 'published',
   },
@@ -424,8 +447,8 @@ app.get('/api/exams', authMiddleware, (req: Request, res: Response) => {
 
   // Student sees exams within availability window
   const studentExams = exams.map((ex) => {
-    const from = new Date(ex.availableFrom);
-    const to = new Date(ex.availableTo);
+    const from = ex.availableFrom ? new Date(ex.availableFrom) : new Date(0);
+    const to = ex.availableTo ? new Date(ex.availableTo) : new Date(Date.now() + 365 * 24 * 3600 * 1000);
     const isOpen = now >= from && now <= to;
     const existingAttempt = attempts.find(
       (a) => a.examId === ex.id && a.studentId === session.userId
@@ -458,6 +481,125 @@ app.get('/api/exams/:id', authMiddleware, (req: Request, res: Response) => {
     return;
   }
   res.json(exam);
+});
+
+// 6b. Public Exam Details (No login required for candidate with exam link)
+app.get('/api/public/exams/:id', (req: Request, res: Response) => {
+  const exam = exams.find((e) => e.id === req.params.id);
+  if (!exam) {
+    res.status(404).json({ error: 'Exam not found' });
+    return;
+  }
+  res.json({
+    id: exam.id,
+    title: exam.title,
+    description: exam.description,
+    instructions: exam.instructions || 'Answer all multiple-choice questions.',
+    durationMinutes: exam.durationMinutes,
+    questionCount: exam.questionIds.length,
+    status: exam.status,
+    allowedTabSwitches: exam.allowedTabSwitches ?? 1,
+    passingScore: exam.passingScore ?? 0,
+    showResultAfterSubmission: exam.showResultAfterSubmission ?? true,
+    autoSubmitOnTabLimit: exam.autoSubmitOnTabLimit ?? false,
+  });
+});
+
+// 6c. Update Exam Settings (Admin Only - Figure 4)
+app.put('/api/exams/:id', authMiddleware, requireRole('admin'), (req: Request, res: Response) => {
+  const examIndex = exams.findIndex((e) => e.id === req.params.id);
+  if (examIndex === -1) {
+    res.status(404).json({ error: 'Exam not found' });
+    return;
+  }
+
+  const {
+    title,
+    description,
+    instructions,
+    durationMinutes,
+    passingScore,
+    maxAttempts,
+    allowedTabSwitches,
+    showResultAfterSubmission,
+    autoSubmitOnTabLimit,
+    status,
+  } = req.body;
+
+  exams[examIndex] = {
+    ...exams[examIndex],
+    title: title !== undefined ? title : exams[examIndex].title,
+    description: description !== undefined ? description : exams[examIndex].description,
+    instructions: instructions !== undefined ? instructions : exams[examIndex].instructions,
+    durationMinutes: durationMinutes !== undefined ? parseInt(durationMinutes) : exams[examIndex].durationMinutes,
+    passingScore: passingScore !== undefined ? parseInt(passingScore) : exams[examIndex].passingScore,
+    maxAttempts: maxAttempts !== undefined ? parseInt(maxAttempts) : exams[examIndex].maxAttempts,
+    allowedTabSwitches: allowedTabSwitches !== undefined ? parseInt(allowedTabSwitches) : exams[examIndex].allowedTabSwitches,
+    showResultAfterSubmission: showResultAfterSubmission !== undefined ? Boolean(showResultAfterSubmission) : exams[examIndex].showResultAfterSubmission,
+    autoSubmitOnTabLimit: autoSubmitOnTabLimit !== undefined ? Boolean(autoSubmitOnTabLimit) : exams[examIndex].autoSubmitOnTabLimit,
+    status: status !== undefined ? status : exams[examIndex].status,
+  };
+
+  res.json(exams[examIndex]);
+});
+
+// 6d. Start Exam Anonymously (User provides Name only, no login required)
+app.post('/api/attempts/start-anonymous', (req: Request, res: Response) => {
+  const { examId, studentName } = req.body;
+  if (!examId || !studentName?.trim()) {
+    res.status(400).json({ error: 'Candidate name and exam ID are required' });
+    return;
+  }
+
+  const exam = exams.find((e) => e.id === examId);
+  if (!exam) {
+    res.status(404).json({ error: 'Exam not found' });
+    return;
+  }
+
+  const cleanName = studentName.trim();
+  const startedAt = new Date();
+  const deadlineAt = new Date(startedAt.getTime() + exam.durationMinutes * 60 * 1000);
+  const studentId = 'guest-' + Math.random().toString(36).substring(2, 9);
+
+  const newAttempt: ExamAttempt = {
+    id: 'att-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+    examId: exam.id,
+    examTitle: exam.title,
+    studentId,
+    studentName: cleanName,
+    studentEmail: `${cleanName.toLowerCase().replace(/\s+/g, '.')}@candidate.exam`,
+    startedAt: startedAt.toISOString(),
+    deadlineAt: deadlineAt.toISOString(),
+    status: 'in_progress',
+    totalQuestions: exam.questionIds.length,
+  };
+
+  attempts.push(newAttempt);
+
+  const examQuestions = exam.questionIds
+    .map((qid) => questions.find((q) => q.id === qid))
+    .filter(Boolean)
+    .map((q) => ({
+      id: q!.id,
+      text: q!.text,
+      optionA: q!.optionA,
+      optionB: q!.optionB,
+      optionC: q!.optionC,
+      optionD: q!.optionD,
+      topic: q!.topic,
+    }));
+
+  res.status(201).json({
+    attemptId: newAttempt.id,
+    studentName: newAttempt.studentName,
+    examTitle: exam.title,
+    startedAt: newAttempt.startedAt,
+    deadlineAt: newAttempt.deadlineAt,
+    remainingSeconds: exam.durationMinutes * 60,
+    questions: examQuestions,
+    answers: [],
+  });
 });
 
 // 7. FR-QB-01 & FR-QB-02: Question Bank (Admin Only)
@@ -593,80 +735,90 @@ app.post('/api/exams', authMiddleware, requireRole('admin'), (req: Request, res:
   res.status(201).json(newExam);
 });
 
-// 9. NVIDIA NIM AI Question Generator Endpoint
-app.post('/api/ai/generate-questions-nim', authMiddleware, requireRole('admin'), async (req: Request, res: Response) => {
-  const { apiKey, model = 'meta/llama-3.3-70b-instruct', topic = 'Cybersecurity', count = 3, difficulty = 'Intermediate' } = req.body;
-  const activeKey = apiKey || process.env.NVIDIA_NIM_API_KEY;
+// 9. AI Question Generator Endpoint (Google Gemini via GEMINI_API_KEY)
+const handleAiGeneration = async (req: Request, res: Response) => {
+  const { topic = 'Cyber Security', count = 3, difficulty = 'Intermediate' } = req.body;
+  const geminiKey = process.env.GEMINI_API_KEY;
 
-  if (!activeKey) {
-    // Return sample simulated questions if no key yet, but provide clear prompt
+  if (!geminiKey) {
     res.status(400).json({
-      error: 'NVIDIA NIM API key is not configured. Please supply your API key to generate questions via NVIDIA NIM.',
-      needsApiKey: true,
+      error: 'GEMINI_API_KEY environment variable is not configured. Please add GEMINI_API_KEY in your environment or Vercel settings.',
+      needsEnvKey: true,
     });
     return;
   }
 
+  const prompt = `You are a professional examination question generator.
+Generate exactly ${count} high-quality, educational multiple-choice questions on the topic "${topic}" at a "${difficulty}" level.
+You MUST output a valid JSON object with a single "questions" property containing an array of questions.
+Each question object MUST have this exact structure:
+{
+  "questions": [
+    {
+      "text": "Full question statement?",
+      "optionA": "First plausible option",
+      "optionB": "Second plausible option",
+      "optionC": "Third plausible option",
+      "optionD": "Fourth plausible option",
+      "correctOption": 0,
+      "topic": "${topic}"
+    }
+  ]
+}
+Note: "correctOption" MUST be an integer: 0 for optionA, 1 for optionB, 2 for optionC, or 3 for optionD. Ensure all 4 options are distinct and plausible.`;
+
   try {
-    const prompt = `You are a high-level computer science examination specialist. Generate ${count} challenging multiple-choice questions on the topic "${topic}" at a "${difficulty}" level.
-Return ONLY valid JSON matching this exact structure with NO markdown wraps or commentary:
-[
-  {
-    "text": "The full question text",
-    "optionA": "First option",
-    "optionB": "Second option",
-    "optionC": "Third option",
-    "optionD": "Fourth option",
-    "correctOption": 0,
-    "topic": "${topic}"
-  }
-]
-Note: correctOption must be 0 for optionA, 1 for optionB, 2 for optionC, or 3 for optionD. Ensure all 4 options are distinct, educational, and realistic.`;
+    let response: any = null;
+    let lastError: any = null;
 
-    const nimResponse = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${activeKey.trim()}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: 'You are an assessment engine that strictly outputs pure JSON.' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.6,
-        max_tokens: 2000,
-      }),
-    });
-
-    if (!nimResponse.ok) {
-      const errText = await nimResponse.text();
-      res.status(nimResponse.status).json({
-        error: `NVIDIA NIM API error (${nimResponse.status}): ${errText}`,
-      });
-      return;
+    // Retry with backoff for transient 503/network spikes
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
+        if (response?.text) break;
+      } catch (e: any) {
+        lastError = e;
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+        }
+      }
     }
 
-    const data = await nimResponse.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    if (!response || !response.text) {
+      throw lastError || new Error('No response received from Gemini AI');
+    }
 
-    // Clean JSON markdown blocks if any
-    content = content.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsedQuestions = JSON.parse(content);
+    let text = response.text || '';
+    text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(text);
+    const rawQuestions: any[] = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.questions)
+      ? parsed.questions
+      : [];
+
+    if (rawQuestions.length === 0) {
+      throw new Error('No valid questions generated by Gemini AI');
+    }
 
     // Save generated questions to question bank
     const created: Question[] = [];
-    for (const q of parsedQuestions) {
+    for (const q of rawQuestions) {
       const newQ: Question = {
-        id: 'q-nim-' + Math.random().toString(36).substring(2, 9),
-        text: q.text,
-        optionA: q.optionA,
-        optionB: q.optionB,
-        optionC: q.optionC,
-        optionD: q.optionD,
-        correctOption: typeof q.correctOption === 'number' ? q.correctOption : 0,
-        topic: q.topic || topic,
+        id: 'q-ai-' + Math.random().toString(36).substring(2, 9),
+        text: String(q.text || '').trim(),
+        optionA: String(q.optionA || '').trim(),
+        optionB: String(q.optionB || '').trim(),
+        optionC: String(q.optionC || '').trim(),
+        optionD: String(q.optionD || '').trim(),
+        correctOption: typeof q.correctOption === 'number' && q.correctOption >= 0 && q.correctOption <= 3 ? q.correctOption : 0,
+        topic: String(q.topic || topic).trim(),
         createdBy: (req as any).session.userId,
       };
       questions.push(newQ);
@@ -674,13 +826,17 @@ Note: correctOption must be 0 for optionA, 1 for optionB, 2 for optionC, or 3 fo
     }
 
     res.json({
-      message: `Successfully generated and imported ${created.length} questions via NVIDIA NIM (${model})`,
+      message: `Successfully generated and imported ${created.length} questions via Google Gemini`,
       questions: created,
+      provider: 'Google Gemini',
     });
   } catch (err: any) {
-    res.status(500).json({ error: 'Failed to process NVIDIA NIM generation: ' + (err.message || err) });
+    res.status(500).json({ error: 'Failed to generate questions: ' + (err.message || err) });
   }
-});
+};
+
+app.post('/api/ai/generate-questions', authMiddleware, requireRole('admin'), handleAiGeneration);
+
 
 // 10. FR-EXAM-01: Start Exam Attempt
 app.post('/api/attempts/start', authMiddleware, (req: Request, res: Response) => {
@@ -695,7 +851,9 @@ app.post('/api/attempts/start', authMiddleware, (req: Request, res: Response) =>
 
   // Check availability window
   const now = new Date();
-  if (now < new Date(exam.availableFrom) || now > new Date(exam.availableTo)) {
+  const from = exam.availableFrom ? new Date(exam.availableFrom) : new Date(0);
+  const to = exam.availableTo ? new Date(exam.availableTo) : new Date(Date.now() + 365 * 24 * 3600 * 1000);
+  if (now < from || now > to) {
     res.status(403).json({ error: 'Exam is outside its scheduled availability window (FR-EXAM-01)' });
     return;
   }
@@ -785,8 +943,7 @@ app.post('/api/attempts/start', authMiddleware, (req: Request, res: Response) =>
 });
 
 // 11. FR-EXAM-02: Answer Capture (Upsert & Time Validation)
-app.put('/api/answers', authMiddleware, (req: Request, res: Response) => {
-  const session = (req as any).session;
+app.put('/api/answers', (req: Request, res: Response) => {
   const { attemptId, questionId, selectedOption } = req.body;
 
   const attempt = attempts.find((a) => a.id === attemptId);
@@ -795,10 +952,15 @@ app.put('/api/answers', authMiddleware, (req: Request, res: Response) => {
     return;
   }
 
-  // Check ownership
-  if (attempt.studentId !== session.userId) {
-    res.status(403).json({ error: 'Access denied: attempt belongs to another student' });
-    return;
+  // If authenticated user, verify ownership; guest attempts bypass auth check
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    const session = sessions.get(token);
+    if (session && !attempt.studentId.startsWith('guest-') && attempt.studentId !== session.userId) {
+      res.status(403).json({ error: 'Access denied: attempt belongs to another student' });
+      return;
+    }
   }
 
   // Check if submitted
@@ -843,6 +1005,22 @@ app.put('/api/answers', authMiddleware, (req: Request, res: Response) => {
     message: 'Answer saved',
     remainingSeconds,
     answer: answerRecord,
+  });
+});
+
+// 11b. Attempt status check (for timer sync)
+app.get('/api/attempts/:id', (req: Request, res: Response) => {
+  const attempt = attempts.find((a) => a.id === req.params.id);
+  if (!attempt) {
+    res.status(404).json({ error: 'Attempt not found' });
+    return;
+  }
+  const deadline = new Date(attempt.deadlineAt).getTime();
+  const remainingSeconds = Math.max(0, Math.floor((deadline - Date.now()) / 1000));
+  res.json({
+    attemptId: attempt.id,
+    remainingSeconds,
+    status: attempt.status,
   });
 });
 
@@ -896,8 +1074,7 @@ app.post('/api/violations', (req: Request, res: Response) => {
 });
 
 // 13. FR-EXAM-04, FR-EXAM-05, FR-RES-01: Submit Exam (Manual or Auto)
-app.post('/api/attempts/:id/submit', authMiddleware, (req: Request, res: Response) => {
-  const session = (req as any).session;
+app.post('/api/attempts/:id/submit', (req: Request, res: Response) => {
   const attempt = attempts.find((a) => a.id === req.params.id);
 
   if (!attempt) {
@@ -905,9 +1082,14 @@ app.post('/api/attempts/:id/submit', authMiddleware, (req: Request, res: Respons
     return;
   }
 
-  if (attempt.studentId !== session.userId && session.role !== 'admin') {
-    res.status(403).json({ error: 'Access denied' });
-    return;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    const session = sessions.get(token);
+    if (session && !attempt.studentId.startsWith('guest-') && attempt.studentId !== session.userId && session.role !== 'admin') {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
   }
 
   if (attempt.status === 'submitted') {
@@ -953,17 +1135,11 @@ app.post('/api/attempts/:id/submit', authMiddleware, (req: Request, res: Respons
 });
 
 // 14. FR-RES-02: Student Result View (Violation count strictly hidden!)
-app.get('/api/attempts/:id/result', authMiddleware, (req: Request, res: Response) => {
-  const session = (req as any).session;
+app.get('/api/attempts/:id/result', (req: Request, res: Response) => {
   const attempt = attempts.find((a) => a.id === req.params.id);
 
   if (!attempt) {
     res.status(404).json({ error: 'Attempt not found' });
-    return;
-  }
-
-  if (attempt.studentId !== session.userId && session.role !== 'admin') {
-    res.status(403).json({ error: 'Access denied' });
     return;
   }
 

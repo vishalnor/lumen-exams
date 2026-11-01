@@ -23,12 +23,18 @@ export interface Question {
 export interface Exam {
   id: string;
   title: string;
-  description: string;
+  description?: string;
+  instructions?: string;
   durationMinutes: number; // 5 to 180
-  availableFrom: string; // ISO
-  availableTo: string; // ISO
+  passingScore?: number; // e.g. 0%
+  maxAttempts?: number; // e.g. 1
+  allowedTabSwitches?: number; // e.g. 1
+  showResultAfterSubmission?: boolean; // toggle
+  autoSubmitOnTabLimit?: boolean; // toggle
+  availableFrom?: string; // ISO
+  availableTo?: string; // ISO
   questionIds: string[];
-  createdBy: string;
+  createdBy?: string;
   status: 'published' | 'draft';
   questionCount?: number;
 }
@@ -38,7 +44,7 @@ export interface ExamAttempt {
   examId: string;
   examTitle?: string;
   studentId: string;
-  studentName?: string;
+  studentName: string;
   studentEmail?: string;
   startedAt: string;
   deadlineAt: string;
@@ -48,6 +54,7 @@ export interface ExamAttempt {
   score?: number;
   totalQuestions?: number;
   remainingSeconds?: number;
+  violationsCount?: number;
 }
 
 export interface Violation {
@@ -62,7 +69,7 @@ export interface ConsolidatedReportRow {
   attemptId: string;
   studentId: string;
   studentName: string;
-  studentEmail: string;
+  studentEmail?: string;
   examId: string;
   examTitle: string;
   score: number;

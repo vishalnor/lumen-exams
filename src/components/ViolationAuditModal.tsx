@@ -158,9 +158,9 @@ export const ViolationAuditModal: React.FC<ViolationAuditModalProps> = ({ row, o
           <button
             type="button"
             onClick={onClose}
-            className="py-2.5 px-5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+            className="py-2.5 px-5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer whitespace-nowrap shrink-0"
           >
-            Close Audit Log
+            <span className="whitespace-nowrap">Close Audit Log</span>
           </button>
         </div>
 

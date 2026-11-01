@@ -1,69 +1,111 @@
 import React, { useState, useEffect } from 'react';
-import { User } from './types';
-import { Navbar } from './components/Navbar';
+import { User, Question } from './types';
 import { LoginScreen } from './components/LoginScreen';
-import { StudentDashboard } from './components/StudentDashboard';
+import { CandidateStartScreen } from './components/CandidateStartScreen';
 import { ExamInterface } from './components/ExamInterface';
 import { ResultScreen } from './components/ResultScreen';
 import { AdminDashboard } from './components/AdminDashboard';
+import { seedFirestoreIfEmpty } from './services/firebaseDb';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [view, setView] = useState<'login' | 'dashboard' | 'exam' | 'result' | 'admin'>('dashboard');
-  const [activeExamId, setActiveExamId] = useState<string | null>(null);
+  
+  // App views: 'candidate-start' | 'exam' | 'result' | 'admin-login' | 'admin-console'
+  const [view, setView] = useState<'candidate-start' | 'exam' | 'result' | 'admin-login' | 'admin-console'>('candidate-start');
+
+  // Candidate / Exam session state
+  const [targetExamId, setTargetExamId] = useState<string>('exam-cyber');
+  const [targetExamTitle, setTargetExamTitle] = useState<string>('Cyber');
+  const [targetExamDuration, setTargetExamDuration] = useState<number>(30);
+  const [targetExamQuestionsCount, setTargetExamQuestionsCount] = useState<number>(3);
+  const [targetExamInstructions, setTargetExamInstructions] = useState<string>('Answer all multiple-choice questions.');
+  
+  const [activeCandidateName, setActiveCandidateName] = useState<string>('');
   const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
+  const [activeQuestions, setActiveQuestions] = useState<Question[]>([]);
+  const [activeRemainingSeconds, setActiveRemainingSeconds] = useState<number>(1800);
+
   const [loading, setLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-  // Auto-login as demo Student on first visit for instant frictionless access
+  // Parse URL search params (e.g. ?exam=exam-webtech or ?exam=exam-cyber)
   useEffect(() => {
-    const savedToken = localStorage.getItem('LUMEN_AUTH_TOKEN');
+    seedFirestoreIfEmpty();
+
+    const params = new URLSearchParams(window.location.search);
+    const examParam = params.get('exam');
+    const examIdToLoad = examParam || 'exam-cyber';
+    setTargetExamId(examIdToLoad);
+
+    // Fetch exam info
+    fetch(`/api/public/exams/${examIdToLoad}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          setTargetExamTitle(data.title || 'Cyber');
+          setTargetExamDuration(data.durationMinutes || 30);
+          setTargetExamQuestionsCount(data.questionCount || 3);
+          setTargetExamInstructions(data.instructions || 'Answer all multiple-choice questions.');
+        }
+      })
+      .catch(() => {});
+
+    // Check if admin token is saved
+    const savedToken = localStorage.getItem('LUMEN_ADMIN_TOKEN');
     if (savedToken) {
-      setToken(savedToken);
       fetch('/api/auth/me', {
         headers: { Authorization: `Bearer ${savedToken}` },
       })
-        .then((res) => {
-          if (res.ok) return res.json();
-          throw new Error('Invalid token');
-        })
+        .then((res) => (res.ok ? res.json() : null))
         .then((userData) => {
-          setUser(userData);
-          setView(userData.role === 'admin' ? 'admin' : 'dashboard');
+          if (userData && userData.role === 'admin') {
+            setUser(userData);
+            setToken(savedToken);
+          }
         })
-        .catch(() => {
-          // Fall back to student default
-          quickLogin('vikas@student.edu', 'Student@123');
-        });
-    } else {
-      quickLogin('vikas@student.edu', 'Student@123');
+        .catch(() => {});
     }
   }, []);
 
-  const quickLogin = async (email: string, pass: string) => {
+  // Candidate starts exam with just full name (NO login required!)
+  const handleCandidateStart = async (name: string) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/attempts/start-anonymous', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pass }),
+        body: JSON.stringify({
+          examId: targetExamId,
+          studentName: name,
+        }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        setToken(data.token);
-        localStorage.setItem('LUMEN_AUTH_TOKEN', data.token);
-        setView(data.user.role === 'admin' ? 'admin' : 'dashboard');
+
+      if (!res.ok) {
+        throw new Error('Failed to start examination');
       }
-    } catch {
-      // offline / starting up
+
+      const data = await res.json();
+      setActiveCandidateName(data.studentName || name);
+      setActiveAttemptId(data.attemptId);
+      setActiveQuestions(data.questions || []);
+      setActiveRemainingSeconds(data.remainingSeconds || targetExamDuration * 60);
+      setView('exam');
+    } catch (err: any) {
+      alert(err.message || 'Error launching examination');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogin = async (email: string, pass: string) => {
+  // Exam submitted
+  const handleExamSubmitted = (attemptId: string) => {
+    setActiveAttemptId(attemptId);
+    setView('result');
+  };
+
+  // Admin Login
+  const handleAdminLogin = async (email: string, pass: string) => {
     setLoading(true);
     setLoginError(null);
     try {
@@ -75,52 +117,48 @@ export default function App() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.error || 'Invalid credentials');
       }
 
       setUser(data.user);
       setToken(data.token);
-      localStorage.setItem('LUMEN_AUTH_TOKEN', data.token);
-      setView(data.user.role === 'admin' ? 'admin' : 'dashboard');
+      localStorage.setItem('LUMEN_ADMIN_TOKEN', data.token);
+      setView('admin-console');
     } catch (err: any) {
-      setLoginError(err.message || 'Invalid credentials (HTTP 401)');
+      setLoginError(err.message || 'Login failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRegister = async (
-    fullName: string,
-    email: string,
-    pass: string,
-    role: 'student' | 'admin'
-  ) => {
+  // Admin Registration
+  const handleAdminRegister = async (fullName: string, email: string, pass: string) => {
     setLoading(true);
     setLoginError(null);
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName, email, password: pass, role }),
+        body: JSON.stringify({ fullName, email, password: pass, role: 'admin' }),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Registration failed');
+        throw new Error(data.error || 'Registration rejected');
       }
 
       setUser(data.user);
       setToken(data.token);
-      localStorage.setItem('LUMEN_AUTH_TOKEN', data.token);
-      setView(data.user.role === 'admin' ? 'admin' : 'dashboard');
+      localStorage.setItem('LUMEN_ADMIN_TOKEN', data.token);
+      setView('admin-console');
     } catch (err: any) {
-      setLoginError(err.message || 'Registration rejected');
+      setLoginError(err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = async () => {
+  const handleAdminSignOut = () => {
     if (token) {
       fetch('/api/auth/logout', {
         method: 'POST',
@@ -129,95 +167,86 @@ export default function App() {
     }
     setUser(null);
     setToken(null);
-    localStorage.removeItem('LUMEN_AUTH_TOKEN');
-    setView('login');
+    localStorage.removeItem('LUMEN_ADMIN_TOKEN');
+    setView('candidate-start');
   };
 
-  const handleSwitchUser = async (targetEmail: string) => {
-    if (targetEmail.includes('admin')) {
-      await quickLogin('admin@lumen.edu', 'Admin@123');
-    } else {
-      await quickLogin('vikas@student.edu', 'Student@123');
-    }
-  };
-
-  const handleStartExam = (examId: string) => {
-    setActiveExamId(examId);
-    setView('exam');
-  };
-
-  const handleExamSubmitted = (attemptId: string) => {
-    setActiveAttemptId(attemptId);
-    setView('result');
-  };
-
-  const handleBackToDashboard = () => {
-    setActiveExamId(null);
-    setActiveAttemptId(null);
-    setView(user?.role === 'admin' ? 'admin' : 'dashboard');
+  const handleOpenExamAsCandidateFromAdmin = (examId: string) => {
+    setTargetExamId(examId);
+    fetch(`/api/public/exams/${examId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          setTargetExamTitle(data.title || 'Exam');
+          setTargetExamDuration(data.durationMinutes || 30);
+          setTargetExamQuestionsCount(data.questionCount || 3);
+          setTargetExamInstructions(data.instructions || 'Answer all multiple-choice questions.');
+        }
+        setView('candidate-start');
+      });
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f5f7fb] text-slate-800">
-      {/* Top Navbar */}
-      <Navbar
-        user={user}
-        onLogout={handleLogout}
-        onSwitchUser={handleSwitchUser}
-        activeView={view}
-        onNavigate={(newView) => setView(newView as any)}
-        examInProgress={view === 'exam'}
-      />
+    <div className="min-h-screen text-slate-800 antialiased selection:bg-[#5d5fef]/10 selection:text-[#5d5fef]">
+      {/* 1. Candidate Name Entry Screen (No login needed!) */}
+      {view === 'candidate-start' && (
+        <CandidateStartScreen
+          examId={targetExamId}
+          examTitle={targetExamTitle}
+          durationMinutes={targetExamDuration}
+          questionCount={targetExamQuestionsCount}
+          instructions={targetExamInstructions}
+          onStart={handleCandidateStart}
+          loading={loading}
+          onGoToConsole={() => setView(user && token ? 'admin-console' : 'admin-login')}
+        />
+      )}
 
-      {/* Main Content Area */}
-      <main className="flex-1">
-        {view === 'login' || !user || !token ? (
-          <LoginScreen
-            onLogin={handleLogin}
-            onRegister={handleRegister}
-            loading={loading}
-            error={loginError}
-            clearError={() => setLoginError(null)}
-          />
-        ) : view === 'dashboard' && user.role === 'student' ? (
-          <StudentDashboard
-            user={user}
-            token={token}
-            onStartExam={handleStartExam}
-            onViewResult={(attemptId) => {
-              setActiveAttemptId(attemptId);
-              setView('result');
-            }}
-          />
-        ) : view === 'exam' && user.role === 'student' && activeExamId ? (
-          <ExamInterface
-            user={user}
-            token={token}
-            examId={activeExamId}
-            onSubmitted={handleExamSubmitted}
-            onExit={handleBackToDashboard}
-          />
-        ) : view === 'result' && activeAttemptId ? (
-          <ResultScreen
-            user={user}
-            token={token}
-            attemptId={activeAttemptId}
-            onBackToDashboard={handleBackToDashboard}
-          />
-        ) : user.role === 'admin' ? (
-          <AdminDashboard user={user} token={token} />
-        ) : (
-          <StudentDashboard
-            user={user}
-            token={token}
-            onStartExam={handleStartExam}
-            onViewResult={(attemptId) => {
-              setActiveAttemptId(attemptId);
-              setView('result');
-            }}
-          />
-        )}
-      </main>
+      {/* 2. Proctored Exam Interface matching IMG-20261101-WA0026 and WA0027 */}
+      {view === 'exam' && activeAttemptId && (
+        <ExamInterface
+          candidateName={activeCandidateName}
+          attemptId={activeAttemptId}
+          examTitle={targetExamTitle}
+          initialQuestions={activeQuestions}
+          initialRemainingSeconds={activeRemainingSeconds}
+          onSubmitted={handleExamSubmitted}
+          token={token || undefined}
+        />
+      )}
+
+      {/* 3. Scored Result Screen matching IMG-20261101-WA0028 */}
+      {view === 'result' && activeAttemptId && (
+        <ResultScreen
+          attemptId={activeAttemptId}
+          onBackToHome={() => {
+            setActiveAttemptId(null);
+            setView('candidate-start');
+          }}
+        />
+      )}
+
+      {/* 4. Admin Sign In Screen matching IMG-20261101-WA0023 */}
+      {view === 'admin-login' && (
+        <LoginScreen
+          onLogin={handleAdminLogin}
+          onRegister={handleAdminRegister}
+          loading={loading}
+          error={loginError}
+          clearError={() => setLoginError(null)}
+          onTakeExamDirectly={() => setView('candidate-start')}
+        />
+      )}
+
+      {/* 5. Admin Console matching IMG-20261101-WA0022, WA0025, and WA0024 */}
+      {view === 'admin-console' && user && token && (
+        <AdminDashboard
+          user={user}
+          token={token}
+          onSignOut={handleAdminSignOut}
+          onOpenExamAsCandidate={handleOpenExamAsCandidateFromAdmin}
+        />
+      )}
     </div>
   );
 }

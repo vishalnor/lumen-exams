@@ -57,17 +57,17 @@ export const TestSuiteViewer: React.FC<TestSuiteViewerProps> = ({ token }) => {
         <button
           onClick={runTestSuite}
           disabled={loading}
-          className="py-3 px-5 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-md shadow-indigo-600/20 active:scale-[0.99] disabled:opacity-60 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+          className="py-3 px-5 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-md shadow-indigo-600/20 active:scale-[0.99] disabled:opacity-60 transition-all flex items-center justify-center space-x-2 cursor-pointer whitespace-nowrap shrink-0"
         >
           {loading ? (
             <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>Executing Test Suite...</span>
+              <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+              <span className="whitespace-nowrap">Executing Test Suite...</span>
             </>
           ) : (
             <>
-              <Play className="w-4 h-4 fill-current" />
-              <span>{executed ? 'Re-Run Verification Suite' : 'Execute Test Suite (Live)'}</span>
+              <Play className="w-4 h-4 fill-current shrink-0" />
+              <span className="whitespace-nowrap">{executed ? 'Re-Run Verification Suite' : 'Execute Test Suite (Live)'}</span>
             </>
           )}
         </button>
@@ -77,40 +77,40 @@ export const TestSuiteViewer: React.FC<TestSuiteViewerProps> = ({ token }) => {
       {executed && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0">
               <Terminal className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block whitespace-nowrap">
                 Total Test Cases
               </span>
-              <span className="text-xl font-extrabold text-slate-900">{stats.total} Cases</span>
+              <span className="text-xl font-extrabold text-slate-900 whitespace-nowrap">{stats.total} Cases</span>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-emerald-200 bg-emerald-50/20 shadow-xs flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
               <CheckCircle2 className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block whitespace-nowrap">
                 Passed Tests
               </span>
-              <span className="text-xl font-extrabold text-emerald-700">
+              <span className="text-xl font-extrabold text-emerald-700 whitespace-nowrap">
                 {stats.passed} / {stats.total} (100%)
               </span>
             </div>
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-700">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-700 shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 block whitespace-nowrap">
                 Integrity Compliance
               </span>
-              <span className="text-xl font-extrabold text-slate-900">Verified</span>
+              <span className="text-xl font-extrabold text-slate-900 whitespace-nowrap">Verified</span>
             </div>
           </div>
         </div>
@@ -119,10 +119,10 @@ export const TestSuiteViewer: React.FC<TestSuiteViewerProps> = ({ token }) => {
       {/* Test Cases Table */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 whitespace-nowrap">
             SRS Test Execution Record & Results
           </h3>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[11px] text-slate-400 whitespace-nowrap shrink-0">
             {executed ? `${results.length} test records verified` : 'Awaiting execution run'}
           </span>
         </div>
@@ -136,23 +136,23 @@ export const TestSuiteViewer: React.FC<TestSuiteViewerProps> = ({ token }) => {
             </p>
             <button
               onClick={runTestSuite}
-              className="py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors inline-flex items-center space-x-1.5 cursor-pointer"
+              className="py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors inline-flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
             >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Run Automated Tests</span>
+              <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+              <span className="whitespace-nowrap">Run Automated Tests</span>
             </button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto min-w-full">
+            <table className="w-full text-left text-xs min-w-[640px]">
               <thead className="bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-100">
                 <tr>
-                  <th className="px-4 py-3">Test ID</th>
-                  <th className="px-3 py-3">Req ID</th>
+                  <th className="px-4 py-3 whitespace-nowrap">Test ID</th>
+                  <th className="px-3 py-3 whitespace-nowrap">Req ID</th>
                   <th className="px-4 py-3">Scenario Description</th>
                   <th className="px-4 py-3">Expected Result</th>
                   <th className="px-4 py-3">Actual Result</th>
-                  <th className="px-4 py-3 text-right">Status</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">

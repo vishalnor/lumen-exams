@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile records for students and faculty",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["student", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "fullName", "email", "role", "createdAt"]
+    },
+    "Question": {
+      "title": "Question",
+      "description": "MCQ items in the question bank",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string", "maxLength": 1000 },
+        "optionA": { "type": "string", "maxLength": 300 },
+        "optionB": { "type": "string", "maxLength": 300 },
+        "optionC": { "type": "string", "maxLength": 300 },
+        "optionD": { "type": "string", "maxLength": 300 },
+        "correctOption": { "type": "integer" },
+        "topic": { "type": "string", "maxLength": 100 },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["id", "text", "optionA", "optionB", "optionC", "optionD", "correctOption", "topic"]
+    },
+    "Exam": {
+      "title": "Exam",
+      "description": "Configured and scheduled examination definitions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "durationMinutes": { "type": "integer" },
+        "availableFrom": { "type": "string", "format": "date-time" },
+        "availableTo": { "type": "string", "format": "date-time" },
+        "questionIds": { "type": "array" },
+        "createdBy": { "type": "string" },
+        "status": { "type": "string", "enum": ["published", "draft"] }
+      },
+      "required": ["id", "title", "durationMinutes", "availableFrom", "availableTo", "status"]
+    },
+    "ExamAttempt": {
+      "title": "ExamAttempt",
+      "description": "Student examination attempts and scoring status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "examId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "studentEmail": { "type": "string", "maxLength": 150 },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "deadlineAt": { "type": "string", "format": "date-time" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "submissionReason": { "type": "string", "enum": ["manual", "auto"] },
+        "status": { "type": "string", "enum": ["in_progress", "submitted"] },
+        "score": { "type": "integer" },
+        "totalQuestions": { "type": "integer" }
+      },
+      "required": ["id", "examId", "studentId", "startedAt", "deadlineAt", "status"]
+    },
+    "Violation": {
+      "title": "Violation",
+      "description": "Server-timestamped tab switch and window visibility proctoring logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "attemptId": { "type": "string" },
+        "eventType": { "type": "string", "maxLength": 50 },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "details": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["id", "attemptId", "eventType", "occurredAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Registered students and administrator profiles"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Privileged administrator role mapping"
+    },
+    "/questions/{questionId}": {
+      "schema": { "$ref": "#/entities/Question" },
+      "description": "Reusable examination question bank items"
+    },
+    "/exams/{examId}": {
+      "schema": { "$ref": "#/entities/Exam" },
+      "description": "Configured examinations"
+    },
+    "/attempts/{attemptId}": {
+      "schema": { "$ref": "#/entities/ExamAttempt" },
+      "description": "Student examination attempts"
+    },
+    "/violations/{violationId}": {
+      "schema": { "$ref": "#/entities/Violation" },
+      "description": "Tab-switch and Page Visibility API proctoring logs"
+    }
+  }
+}
