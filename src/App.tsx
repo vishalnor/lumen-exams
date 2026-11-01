@@ -104,6 +104,23 @@ export default function App() {
     setView('result');
   };
 
+  // Helper for safe JSON response parsing
+  const parseResponse = async (res: Response, fallbackMsg: string) => {
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await res.text();
+      if (text.includes('could not be found') || res.status === 404) {
+        throw new Error('API server route not found (404). Check your Vercel deployment.');
+      }
+      throw new Error(`Server returned status ${res.status}`);
+    }
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || fallbackMsg);
+    }
+    return data;
+  };
+
   // Admin Login
   const handleAdminLogin = async (email: string, pass: string) => {
     setLoading(true);
@@ -115,11 +132,7 @@ export default function App() {
         body: JSON.stringify({ email, password: pass }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Invalid credentials');
-      }
-
+      const data = await parseResponse(res, 'Invalid email or password');
       setUser(data.user);
       setToken(data.token);
       localStorage.setItem('LUMEN_ADMIN_TOKEN', data.token);
@@ -142,11 +155,7 @@ export default function App() {
         body: JSON.stringify({ fullName, email, password: pass, role: 'admin' }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Registration rejected');
-      }
-
+      const data = await parseResponse(res, 'Registration rejected');
       setUser(data.user);
       setToken(data.token);
       localStorage.setItem('LUMEN_ADMIN_TOKEN', data.token);

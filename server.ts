@@ -1,5 +1,4 @@
 import express, { Request, Response, NextFunction } from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -29,6 +28,16 @@ const ai = new GoogleGenAI({
 app.use(express.json());
 app.use(express.text({ type: ['text/plain', 'application/json'] }));
 app.use(express.urlencoded({ extended: true }));
+
+// Normalize request URL on Vercel where /api prefix might be stripped by router
+app.use((req, _res, next) => {
+  if (process.env.VERCEL) {
+    if (!req.url.startsWith('/api')) {
+      req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+    }
+  }
+  next();
+});
 
 // --- IN-MEMORY DATABASE & SEED DATA (Academic SRS Specification) ---
 
@@ -543,6 +552,35 @@ app.put('/api/exams/:id', authMiddleware, requireRole('admin'), (req: Request, r
   res.json(exams[examIndex]);
 });
 
+// 6c. Delete Exam (Admin Only)
+app.delete('/api/exams/:id', authMiddleware, requireRole('admin'), (req: Request, res: Response) => {
+  const examIndex = exams.findIndex((e) => e.id === req.params.id);
+  if (examIndex === -1) {
+    res.status(404).json({ error: 'Exam not found' });
+    return;
+  }
+  const deletedExam = exams.splice(examIndex, 1)[0];
+  // Clean up any attempts for this exam
+  for (let i = attempts.length - 1; i >= 0; i--) {
+    if (attempts[i].examId === req.params.id) {
+      attempts.splice(i, 1);
+    }
+  }
+  res.json({ message: `Exam "${deletedExam.title}" deleted successfully`, examId: deletedExam.id });
+});
+
+// Remove a question from a specific exam
+app.delete('/api/exams/:examId/questions/:questionId', authMiddleware, requireRole('admin'), (req: Request, res: Response) => {
+  const { examId, questionId } = req.params;
+  const exam = exams.find((e) => e.id === examId);
+  if (!exam) {
+    res.status(404).json({ error: 'Exam not found' });
+    return;
+  }
+  exam.questionIds = exam.questionIds.filter((qid) => qid !== questionId);
+  res.json({ message: 'Question removed from exam', exam });
+});
+
 // 6d. Start Exam Anonymously (User provides Name only, no login required)
 app.post('/api/attempts/start-anonymous', (req: Request, res: Response) => {
   const { examId, studentName } = req.body;
@@ -608,7 +646,7 @@ app.get('/api/questions', authMiddleware, requireRole('admin'), (req: Request, r
 });
 
 app.post('/api/questions', authMiddleware, requireRole('admin'), (req: Request, res: Response) => {
-  const { text, optionA, optionB, optionC, optionD, correctOption, topic } = req.body;
+  const { text, optionA, optionB, optionC, optionD, correctOption, topic, examId } = req.body;
 
   if (
     !text ||
@@ -639,6 +677,15 @@ app.post('/api/questions', authMiddleware, requireRole('admin'), (req: Request, 
   };
 
   questions.push(newQuestion);
+
+  // If examId is provided, attach directly to this specific exam
+  if (examId) {
+    const targetExam = exams.find((e) => e.id === examId);
+    if (targetExam && !targetExam.questionIds.includes(newQuestion.id)) {
+      targetExam.questionIds.push(newQuestion.id);
+    }
+  }
+
   res.status(201).json(newQuestion);
 });
 
@@ -737,7 +784,7 @@ app.post('/api/exams', authMiddleware, requireRole('admin'), (req: Request, res:
 
 // 9. AI Question Generator Endpoint (Google Gemini via GEMINI_API_KEY)
 const handleAiGeneration = async (req: Request, res: Response) => {
-  const { topic = 'Cyber Security', count = 3, difficulty = 'Intermediate' } = req.body;
+  const { topic = 'Cyber Security', count = 3, difficulty = 'Intermediate', examId } = req.body;
   const geminiKey = process.env.GEMINI_API_KEY;
 
   if (!geminiKey) {
@@ -771,22 +818,32 @@ Note: "correctOption" MUST be an integer: 0 for optionA, 1 for optionB, 2 for op
     let response: any = null;
     let lastError: any = null;
 
-    // Retry with backoff for transient 503/network spikes
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        response = await ai.models.generateContent({
-          model: 'gemini-3.8-flash',
+    // Helper to call with timeout so it NEVER hangs
+    const callModelWithTimeout = (modelName: string, timeoutMs: number) => {
+      return Promise.race([
+        ai.models.generateContent({
+          model: modelName,
           contents: prompt,
           config: {
             responseMimeType: 'application/json',
           },
-        });
-        if (response?.text) break;
-      } catch (e: any) {
-        lastError = e;
-        if (attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
-        }
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout after ${timeoutMs}ms calling model ${modelName}`)), timeoutMs)
+        ),
+      ]);
+    };
+
+    // Primary: gemini-3.1-flash-lite (blazing fast, ~1-2s response time)
+    try {
+      response = await callModelWithTimeout('gemini-3.1-flash-lite', 8000);
+    } catch (e: any) {
+      console.warn('gemini-3.1-flash-lite failed, trying gemini-3.8-flash:', e?.message);
+      lastError = e;
+      try {
+        response = await callModelWithTimeout('gemini-3.8-flash', 8000);
+      } catch (e2: any) {
+        lastError = e2;
       }
     }
 
@@ -825,12 +882,26 @@ Note: "correctOption" MUST be an integer: 0 for optionA, 1 for optionB, 2 for op
       created.push(newQ);
     }
 
+    // If an examId was specified, attach all generated questions directly to that specific exam!
+    if (examId) {
+      const targetExam = exams.find((e) => e.id === examId);
+      if (targetExam) {
+        for (const q of created) {
+          if (!targetExam.questionIds.includes(q.id)) {
+            targetExam.questionIds.push(q.id);
+          }
+        }
+      }
+    }
+
     res.json({
-      message: `Successfully generated and imported ${created.length} questions via Google Gemini`,
+      message: `Successfully generated ${created.length} questions${examId ? ' and added directly to this exam' : ''}`,
       questions: created,
+      examId: examId || null,
       provider: 'Google Gemini',
     });
   } catch (err: any) {
+    console.error('AI question generation error:', err?.message || err);
     res.status(500).json({ error: 'Failed to generate questions: ' + (err.message || err) });
   }
 };
@@ -1558,6 +1629,7 @@ app.get('/api/test-suite/run', authMiddleware, requireRole('admin'), (req: Reque
 // --- VITE MIDDLEWARE (DEV) OR STATIC FILES (PROD) ---
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -1578,6 +1650,12 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-});
+// Only start the standalone HTTP listener if not running as a Vercel serverless function
+if (!process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+  });
+}
+
+export default app;
+export { app };

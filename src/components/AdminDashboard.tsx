@@ -14,6 +14,8 @@ import {
   Plus,
   ExternalLink,
   Sparkles,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { GeminiAiModal } from './GeminiAiModal';
 import { ViolationAuditModal } from './ViolationAuditModal';
@@ -43,8 +45,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [copiedExamId, setCopiedExamId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Modals
+  // Modals & specific exam actions
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+  const [examToDelete, setExamToDelete] = useState<Exam | null>(null);
+  const [isManualQuestionModalOpen, setIsManualQuestionModalOpen] = useState(false);
   const [selectedAuditRow, setSelectedAuditRow] = useState<ConsolidatedReportRow | null>(null);
 
   // Settings form state (matching Figure 4)
@@ -195,7 +199,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     } catch {}
   };
 
-  // Create Question
+  // Delete Exam
+  const handleDeleteExam = async (examId: string) => {
+    try {
+      const res = await fetch(`/api/exams/${examId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setExams((prev) => prev.filter((e) => e.id !== examId));
+        if (activeExam?.id === examId) {
+          const remaining = exams.filter((e) => e.id !== examId);
+          setActiveExam(remaining.length > 0 ? remaining[0] : null);
+          setAdminView('overview');
+        }
+        setExamToDelete(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete exam:', err);
+    }
+  };
+
+  // Remove question from specific exam
+  const handleRemoveQuestionFromExam = async (examId: string, questionId: string) => {
+    try {
+      const res = await fetch(`/api/exams/${examId}/questions/${questionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActiveExam(data.exam);
+        fetchExams();
+      }
+    } catch (err) {
+      console.error('Failed to remove question from exam:', err);
+    }
+  };
+
+  // Create Question directly for activeExam
+  const handleCreateQuestionForExam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeExam) return;
+    try {
+      const res = await fetch('/api/questions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: newQText,
+          optionA: newQOptA,
+          optionB: newQOptB,
+          optionC: newQOptC,
+          optionD: newQOptD,
+          correctOption: newQCorrect,
+          topic: newQTopic || activeExam.title,
+          examId: activeExam.id,
+        }),
+      });
+      if (res.ok) {
+        setNewQText('');
+        setNewQOptA('');
+        setNewQOptB('');
+        setNewQOptC('');
+        setNewQOptD('');
+        setIsManualQuestionModalOpen(false);
+        await fetchQuestions();
+        await fetchExams();
+        // Update activeExam
+        setActiveExam((prev) =>
+          prev
+            ? {
+                ...prev,
+                questionIds: [...prev.questionIds, (res as any).id || 'q-' + Date.now()],
+              }
+            : null
+        );
+      }
+    } catch (err) {
+      console.error('Failed to add question to exam:', err);
+    }
+  };
+
+  // Create Question (generic)
   const handleCreateQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -259,14 +347,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            <button
-              onClick={() => setIsAiModalOpen(true)}
-              className="inline-flex items-center space-x-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              <Sparkles className="w-3.5 h-3.5 shrink-0" />
-              <span className="whitespace-nowrap">AI Generator</span>
-            </button>
-
             <button
               onClick={() => setAdminView('testsuite')}
               className="inline-flex items-center space-x-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
@@ -407,7 +487,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {/* Copy Link for Student */}
                         <button
                           onClick={() => copyExamLink(ex.id)}
-                          className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-[#f8faff] hover:bg-slate-100 border border-slate-200 transition-colors inline-flex items-center space-x-1 whitespace-nowrap shrink-0"
+                          className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-[#f8faff] hover:bg-slate-100 border border-slate-200 transition-colors inline-flex items-center space-x-1 whitespace-nowrap shrink-0 cursor-pointer"
                           title="Copy direct exam link for candidates"
                         >
                           {copiedExamId === ex.id ? (
@@ -427,12 +507,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         {onOpenExamAsCandidate && (
                           <button
                             onClick={() => onOpenExamAsCandidate(ex.id)}
-                            className="rounded-full px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors whitespace-nowrap shrink-0"
+                            className="rounded-full px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                             title="Open exam as student to take it"
                           >
                             Take Exam
                           </button>
                         )}
+
+                        {/* Questions for this specific exam */}
+                        <button
+                          onClick={() => {
+                            setActiveExam(ex);
+                            setAdminView('questions');
+                          }}
+                          className="rounded-full px-3.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors whitespace-nowrap shrink-0 inline-flex items-center space-x-1 cursor-pointer"
+                          title="Manage questions for this exam"
+                        >
+                          <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                          <span className="whitespace-nowrap">Questions ({ex.questionIds.length})</span>
+                        </button>
 
                         {/* Responses view */}
                         <button
@@ -440,7 +533,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setActiveExam(ex);
                             setAdminView('responses');
                           }}
-                          className="rounded-full px-4 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
+                          className="rounded-full px-3.5 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           Responses
                         </button>
@@ -451,39 +544,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             setActiveExam(ex);
                             setAdminView('settings');
                           }}
-                          className="rounded-full px-4 py-1.5 text-xs font-bold text-white bg-[#5d5fef] hover:bg-[#4d4fdf] transition-colors whitespace-nowrap shrink-0"
+                          className="rounded-full px-3.5 py-1.5 text-xs font-bold text-white bg-[#5d5fef] hover:bg-[#4d4fdf] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                         >
                           Settings
+                        </button>
+
+                        {/* Delete Exam Button */}
+                        <button
+                          type="button"
+                          onClick={() => setExamToDelete(ex)}
+                          className="w-8 h-8 rounded-full border border-slate-200 hover:border-rose-200 bg-white hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                          title="Delete this exam"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 shrink-0" />
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Quick Question Bank & AI generation */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between p-5 rounded-[24px] bg-white border border-slate-100 shadow-2xs gap-3">
-              <div>
-                <h4 className="text-xs font-bold text-slate-900">Question Bank & AI Generator</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Generate multiple-choice items automatically with AI or manage items manually.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  onClick={() => setIsAiModalOpen(true)}
-                  className="rounded-full px-4 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <span className="whitespace-nowrap">AI Generator</span>
-                </button>
-                <button
-                  onClick={() => setAdminView('questions')}
-                  className="rounded-full px-4 py-1.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <span className="whitespace-nowrap">Manage Bank ({questions.length})</span>
-                </button>
-              </div>
             </div>
           </div>
         )}
@@ -763,6 +842,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
 
+              {/* Exam Questions Row */}
+              <div className="flex items-center justify-between py-2 border-b border-slate-100 gap-3">
+                <div>
+                  <span className="text-xs font-medium text-slate-700 block">Exam Questions</span>
+                  <span className="text-[11px] text-slate-400">
+                    {activeExam.questionIds.length} {activeExam.questionIds.length === 1 ? 'question' : 'questions'} configured
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdminView('questions')}
+                  className="rounded-full px-3.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition-colors cursor-pointer whitespace-nowrap shrink-0 inline-flex items-center space-x-1"
+                >
+                  <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                  <span>Manage Questions ({activeExam.questionIds.length}) &rarr;</span>
+                </button>
+              </div>
+
               {/* Direct shareable candidate link */}
               <div className="p-4 rounded-2xl bg-[#f8faff] border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -805,105 +902,197 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <span className="whitespace-nowrap">Save Settings</span>
                 </button>
               </div>
+
+              {/* Danger Zone: Delete this Exam */}
+              <div className="mt-8 pt-6 border-t border-rose-100">
+                <div className="p-4 sm:p-5 rounded-2xl bg-rose-50/70 border border-rose-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-xs font-black text-rose-900 uppercase tracking-wider mb-0.5">Danger Zone</h4>
+                    <p className="text-xs text-rose-700 leading-relaxed">
+                      Permanently delete <span className="font-bold">"{activeExam.title}"</span>. All candidate responses and direct links will be removed.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExamToDelete(activeExam)}
+                    className="rounded-full px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-all inline-flex items-center justify-center space-x-1.5 shrink-0 self-start sm:self-auto cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                    <span className="whitespace-nowrap">Delete Exam</span>
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
         )}
 
-        {/* VIEW 4: QUESTION BANK MANAGER */}
+        {/* VIEW 4: EXAM SPECIFIC QUESTIONS MANAGER */}
         {adminView === 'questions' && (
           <div>
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-              <button
-                onClick={() => setAdminView('overview')}
-                className="rounded-full px-4 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <span className="whitespace-nowrap">Back</span>
-              </button>
-              <button
-                onClick={() => setIsAiModalOpen(true)}
-                className="rounded-full px-4 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-[#5d5fef] to-[#6c5ce7] hover:opacity-95 transition-all shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <span className="whitespace-nowrap">Generate with AI</span>
-              </button>
-            </div>
-
-            <h1 className="text-xl font-black text-slate-900 mb-4">Question Bank Items</h1>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white rounded-[28px] p-6 border border-slate-100 shadow-2xs h-fit">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-4">
-                  Add New Question
-                </h3>
-                <form onSubmit={handleCreateQuestion} className="space-y-3 text-xs">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Question Text</label>
-                    <textarea
-                      required
-                      rows={3}
-                      value={newQText}
-                      onChange={(e) => setNewQText(e.target.value)}
-                      placeholder="Enter question text..."
-                      className="w-full p-2.5 rounded-xl border border-slate-200 focus:outline-none"
-                    />
-                  </div>
-
-                  {[
-                    { label: 'A', val: newQOptA, set: setNewQOptA, idx: 0 },
-                    { label: 'B', val: newQOptB, set: setNewQOptB, idx: 1 },
-                    { label: 'C', val: newQOptC, set: setNewQOptC, idx: 2 },
-                    { label: 'D', val: newQOptD, set: setNewQOptD, idx: 3 },
-                  ].map((opt) => (
-                    <div key={opt.label} className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        name="correct"
-                        checked={newQCorrect === opt.idx}
-                        onChange={() => setNewQCorrect(opt.idx)}
-                      />
-                      <input
-                        type="text"
-                        required
-                        value={opt.val}
-                        onChange={(e) => opt.set(e.target.value)}
-                        placeholder={`Option ${opt.label}`}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs"
-                      />
-                    </div>
-                  ))}
-
+            {!activeExam ? (
+              <div className="bg-white rounded-[28px] p-8 text-center border border-slate-100">
+                <p className="text-xs text-slate-500 mb-3">No exam selected.</p>
+                <button
+                  onClick={() => setAdminView('overview')}
+                  className="rounded-full px-4 py-1.5 text-xs font-bold text-white bg-[#5d5fef]"
+                >
+                  Return to Overview
+                </button>
+              </div>
+            ) : (
+              <div>
+                {/* Top Back & Action buttons Header */}
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
                   <button
-                    type="submit"
-                    className="w-full rounded-full py-2.5 text-xs font-bold text-white bg-[#5d5fef] hover:bg-[#4d4fdf] cursor-pointer whitespace-nowrap"
+                    onClick={() => setAdminView('overview')}
+                    className="rounded-full px-4 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
                   >
-                    <span className="whitespace-nowrap">Save Question</span>
+                    <span className="whitespace-nowrap">&larr; Back</span>
                   </button>
-                </form>
-              </div>
 
-              <div className="md:col-span-2 space-y-3">
-                {questions.map((q, idx) => (
-                  <div key={q.id} className="bg-white rounded-[24px] p-4 border border-slate-100 shadow-2xs text-xs">
-                    <div className="font-bold text-slate-900 mb-2">
-                      #{idx + 1}. {q.text}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => setIsAiModalOpen(true)}
+                      className="rounded-full px-4 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-[#5d5fef] to-[#6c5ce7] hover:opacity-95 shadow-md shadow-[#5d5fef]/20 transition-all inline-flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">✨ AI Generate for this Exam</span>
+                    </button>
+
+                    <button
+                      onClick={() => setIsManualQuestionModalOpen(true)}
+                      className="rounded-full px-4 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-xs inline-flex items-center space-x-1.5 cursor-pointer whitespace-nowrap shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      <span className="whitespace-nowrap">Add Question</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Exam Questions Title & Subtitle */}
+                <div className="mb-6">
+                  <div className="flex items-center space-x-2 mb-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      EXAM QUESTIONS
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                        activeExam.status === 'published'
+                          ? 'bg-[#e6f8f0] text-[#00b87c]'
+                          : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {activeExam.status}
+                    </span>
+                  </div>
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                    {activeExam.title}
+                  </h1>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {activeExam.questionIds.length} {activeExam.questionIds.length === 1 ? 'question' : 'questions'} configured in this assessment &bull; {activeExam.durationMinutes} min
+                  </p>
+                </div>
+
+                {/* Questions List */}
+                {activeExam.questionIds.length === 0 ? (
+                  <div className="bg-white rounded-[28px] p-8 text-center border border-slate-100 shadow-2xs">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-[#5d5fef] flex items-center justify-center mx-auto mb-3">
+                      <BookOpen className="w-6 h-6" />
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <span className={q.correctOption === 0 ? 'text-emerald-700 font-bold' : 'text-slate-600'}>
-                        A: {q.optionA}
-                      </span>
-                      <span className={q.correctOption === 1 ? 'text-emerald-700 font-bold' : 'text-slate-600'}>
-                        B: {q.optionB}
-                      </span>
-                      <span className={q.correctOption === 2 ? 'text-emerald-700 font-bold' : 'text-slate-600'}>
-                        C: {q.optionC}
-                      </span>
-                      <span className={q.correctOption === 3 ? 'text-emerald-700 font-bold' : 'text-slate-600'}>
-                        D: {q.optionD}
-                      </span>
+                    <h3 className="text-sm font-bold text-slate-900 mb-1">No questions in this exam yet</h3>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto mb-5">
+                      Generate high-quality multiple choice questions automatically with Gemini AI or add your own questions.
+                    </p>
+                    <div className="flex items-center justify-center gap-3">
+                      <button
+                        onClick={() => setIsAiModalOpen(true)}
+                        className="rounded-full px-5 py-2 text-xs font-bold text-white bg-[#5d5fef] hover:bg-[#4d4fdf] shadow-md shadow-[#5d5fef]/20 transition-all inline-flex items-center space-x-1.5 cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>AI Generate Questions</span>
+                      </button>
+                      <button
+                        onClick={() => setIsManualQuestionModalOpen(true)}
+                        className="rounded-full px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                      >
+                        Add Manually
+                      </button>
                     </div>
                   </div>
-                ))}
+                ) : (
+                  <div className="space-y-4">
+                    {activeExam.questionIds.map((qid, idx) => {
+                      const q = questions.find((item) => item.id === qid);
+                      if (!q) return null;
+                      return (
+                        <div
+                          key={q.id}
+                          className="bg-white rounded-[24px] p-5 border border-slate-100 shadow-2xs hover:border-slate-200 transition-all"
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-2.5">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                                Question {idx + 1}
+                              </span>
+                              {q.topic && (
+                                <span className="text-[10px] font-medium text-slate-400">
+                                  {q.topic}
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveQuestionFromExam(activeExam.id, q.id)}
+                              className="text-slate-400 hover:text-rose-600 transition-colors p-1 rounded-lg hover:bg-rose-50 cursor-pointer shrink-0"
+                              title="Remove from this exam"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          <p className="text-xs sm:text-sm font-bold text-slate-900 mb-3 leading-relaxed">
+                            {q.text}
+                          </p>
+
+                          {/* Options Grid */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            {[
+                              { label: 'A', text: q.optionA, idx: 0 },
+                              { label: 'B', text: q.optionB, idx: 1 },
+                              { label: 'C', text: q.optionC, idx: 2 },
+                              { label: 'D', text: q.optionD, idx: 3 },
+                            ].map((opt) => (
+                              <div
+                                key={opt.label}
+                                className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+                                  q.correctOption === opt.idx
+                                    ? 'bg-[#e6f8f0] border-[#a7f3d0] text-[#00875a] font-bold'
+                                    : 'bg-[#f8faff] border-slate-100 text-slate-600'
+                                }`}
+                              >
+                                <div className="flex items-center space-x-2 min-w-0">
+                                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0 ${
+                                    q.correctOption === opt.idx ? 'bg-[#00b87c] text-white' : 'bg-slate-200 text-slate-600'
+                                  }`}>
+                                    {opt.label}
+                                  </span>
+                                  <span className="truncate">{opt.text}</span>
+                                </div>
+                                {q.correctOption === opt.idx && (
+                                  <Check className="w-4 h-4 text-[#00b87c] shrink-0 ml-1" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -915,7 +1104,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onClick={() => setAdminView('overview')}
                 className="rounded-full px-4 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-xs whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <span className="whitespace-nowrap">Back</span>
+                <span className="whitespace-nowrap">&larr; Back</span>
               </button>
             </div>
             <TestSuiteViewer token={token} />
@@ -924,14 +1113,138 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       </div>
 
-      {/* Modals */}
+      {/* Gemini AI Modal (Targeted to activeExam) */}
       <GeminiAiModal
         isOpen={isAiModalOpen}
         onClose={() => setIsAiModalOpen(false)}
         token={token}
-        onQuestionsImported={() => fetchQuestions()}
+        targetExam={activeExam}
+        onQuestionsImported={async () => {
+          await fetchQuestions();
+          await fetchExams();
+        }}
       />
 
+      {/* Manual Question Creation Modal for activeExam */}
+      {isManualQuestionModalOpen && activeExam && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                Add Question to "{activeExam.title}"
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsManualQuestionModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateQuestionForExam} className="space-y-3.5 text-xs">
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                  Question Statement
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={newQText}
+                  onChange={(e) => setNewQText(e.target.value)}
+                  placeholder="Enter the question statement..."
+                  className="w-full p-3 rounded-2xl bg-[#f8faff] border border-slate-200 focus:bg-white focus:border-[#5d5fef] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                  Options (select correct one)
+                </label>
+                <div className="space-y-2">
+                  {[
+                    { label: 'A', val: newQOptA, set: setNewQOptA, idx: 0 },
+                    { label: 'B', val: newQOptB, set: setNewQOptB, idx: 1 },
+                    { label: 'C', val: newQOptC, set: setNewQOptC, idx: 2 },
+                    { label: 'D', val: newQOptD, set: setNewQOptD, idx: 3 },
+                  ].map((opt) => (
+                    <div key={opt.label} className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        id={`opt-${opt.label}`}
+                        name="correctOpt"
+                        checked={newQCorrect === opt.idx}
+                        onChange={() => setNewQCorrect(opt.idx)}
+                        className="cursor-pointer"
+                      />
+                      <input
+                        type="text"
+                        required
+                        value={opt.val}
+                        onChange={(e) => opt.set(e.target.value)}
+                        placeholder={`Option ${opt.label}`}
+                        className="w-full px-3 py-2 rounded-xl bg-[#f8faff] border border-slate-200 text-xs focus:bg-white focus:border-[#5d5fef] focus:outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsManualQuestionModalOpen(false)}
+                  className="rounded-full px-4 py-2 font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-full px-5 py-2 font-bold text-white bg-[#5d5fef] hover:bg-[#4d4fdf] shadow-md shadow-[#5d5fef]/20 cursor-pointer"
+                >
+                  Add Question
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Exam Confirmation Modal */}
+      {examToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="relative w-full max-w-md bg-white rounded-[28px] p-6 shadow-2xl border border-slate-100">
+            <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-black text-slate-900 mb-1">
+              Delete "{examToDelete.title}"?
+            </h3>
+            <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+              Are you sure you want to delete this exam? All candidate responses and the shareable exam link will be permanently removed. This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setExamToDelete(null)}
+                className="rounded-full px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteExam(examToDelete.id)}
+                className="rounded-full px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/20 transition-all cursor-pointer inline-flex items-center space-x-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Exam</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Violation Audit Modal */}
       <ViolationAuditModal
         row={selectedAuditRow}
         onClose={() => setSelectedAuditRow(null)}

@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, CheckCircle2, AlertCircle, Loader2, X } from 'lucide-react';
-import { Question } from '../types';
+import { Question, Exam } from '../types';
 
 interface GeminiAiModalProps {
   isOpen: boolean;
   onClose: () => void;
   token: string;
   onQuestionsImported: () => void;
+  targetExam?: Exam | null;
 }
 
 export const GeminiAiModal: React.FC<GeminiAiModalProps> = ({
@@ -14,14 +15,21 @@ export const GeminiAiModal: React.FC<GeminiAiModalProps> = ({
   onClose,
   token,
   onQuestionsImported,
+  targetExam,
 }) => {
-  const [topic, setTopic] = useState('Cyber Security');
+  const [topic, setTopic] = useState(targetExam?.title || 'Cyber Security');
   const [count, setCount] = useState<number>(3);
   const [difficulty, setDifficulty] = useState<string>('Intermediate');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedQuestions, setGeneratedQuestions] = useState<Question[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (targetExam?.title) {
+      setTopic(targetExam.title);
+    }
+  }, [targetExam]);
 
   if (!isOpen) return null;
 
@@ -37,6 +45,9 @@ export const GeminiAiModal: React.FC<GeminiAiModalProps> = ({
     }
 
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 16000);
+
     try {
       const res = await fetch('/api/ai/generate-questions', {
         method: 'POST',
@@ -48,7 +59,9 @@ export const GeminiAiModal: React.FC<GeminiAiModalProps> = ({
           topic: topic.trim(),
           count,
           difficulty,
+          examId: targetExam?.id,
         }),
+        signal: controller.signal,
       });
 
       const data = await res.json();
@@ -57,11 +70,21 @@ export const GeminiAiModal: React.FC<GeminiAiModalProps> = ({
       }
 
       setGeneratedQuestions(data.questions || []);
-      setSuccessMessage(data.message || `Generated ${data.questions?.length || count} questions!`);
+      setSuccessMessage(
+        data.message ||
+          `Generated ${data.questions?.length || count} questions${
+            targetExam ? ` for "${targetExam.title}"` : ''
+          }!`
+      );
       onQuestionsImported();
     } catch (err: any) {
-      setError(err.message || 'Error communicating with Gemini AI');
+      if (err.name === 'AbortError') {
+        setError('AI generation timed out. Please try again.');
+      } else {
+        setError(err.message || 'Error communicating with Gemini AI');
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -72,21 +95,23 @@ export const GeminiAiModal: React.FC<GeminiAiModalProps> = ({
         
         {/* Header */}
         <div className="flex items-start justify-between mb-5 gap-3 shrink-0">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 min-w-0">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#5d5fef] to-[#6c5ce7] flex items-center justify-center text-white shadow-md shadow-[#5d5fef]/20 shrink-0">
               <Sparkles className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center space-x-2">
-                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight whitespace-nowrap">
-                  AI Question Generator
+                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight truncate">
+                  {targetExam ? `AI Generator: ${targetExam.title}` : 'AI Question Generator'}
                 </h3>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 uppercase tracking-wider whitespace-nowrap shrink-0">
                   Gemini AI
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Automatically generate multiple-choice questions with Gemini AI
+              <p className="text-xs text-slate-400 mt-0.5 truncate">
+                {targetExam
+                  ? `Generate questions directly for "${targetExam.title}"`
+                  : 'Automatically generate multiple-choice questions with Gemini AI'}
               </p>
             </div>
           </div>
@@ -195,7 +220,9 @@ export const GeminiAiModal: React.FC<GeminiAiModalProps> = ({
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 shrink-0" />
-                  <span className="whitespace-nowrap">Generate Questions</span>
+                  <span className="whitespace-nowrap">
+                    {targetExam ? `Generate for ${targetExam.title}` : 'Generate Questions'}
+                  </span>
                 </>
               )}
             </button>
@@ -205,7 +232,9 @@ export const GeminiAiModal: React.FC<GeminiAiModalProps> = ({
           {generatedQuestions.length > 0 && (
             <div className="mt-4 pt-4 border-t border-slate-100">
               <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2.5 whitespace-nowrap">
-                Added to Question Bank ({generatedQuestions.length})
+                {targetExam
+                  ? `Added to "${targetExam.title}" (${generatedQuestions.length})`
+                  : `Added to Question Bank (${generatedQuestions.length})`}
               </h4>
               <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
                 {generatedQuestions.map((q, idx) => (
