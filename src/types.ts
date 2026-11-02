@@ -5,7 +5,7 @@ export interface User {
   fullName: string;
   email: string;
   role: UserRole;
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface Question {
@@ -17,7 +17,9 @@ export interface Question {
   optionD: string;
   correctOption?: number; // 0, 1, 2, 3 (hidden from student during active exam)
   topic: string;
+  examId?: string;
   createdBy?: string;
+  createdAt?: string;
 }
 
 export interface Exam {
@@ -35,6 +37,7 @@ export interface Exam {
   availableTo?: string; // ISO
   questionIds: string[];
   createdBy?: string;
+  createdAt?: string;
   status: 'published' | 'draft';
   questionCount?: number;
 }

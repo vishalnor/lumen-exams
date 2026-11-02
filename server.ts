@@ -24,17 +24,27 @@ const ai = new GoogleGenAI({
   },
 });
 
+// CORS & Preflight handling
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+});
+
 // Parsers: handle json, text (for navigator.sendBeacon) and urlencoded
 app.use(express.json());
 app.use(express.text({ type: ['text/plain', 'application/json'] }));
 app.use(express.urlencoded({ extended: true }));
 
-// Normalize request URL on Vercel where /api prefix might be stripped by router
+// Normalize request URL on Vercel or proxy where /api prefix might be stripped
 app.use((req, _res, next) => {
-  if (process.env.VERCEL) {
-    if (!req.url.startsWith('/api')) {
-      req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
-    }
+  if (!req.url.startsWith('/api')) {
+    req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
   }
   next();
 });
