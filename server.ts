@@ -4,6 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { createPersistence } from './persistence';
 import { Question, Exam, ExamAttempt, Violation, ConsolidatedReportRow, TestCaseResult } from './src/types';
 
 dotenv.config();
@@ -43,7 +44,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Normalize request URL on Vercel or proxy where /api prefix might be stripped
 app.use((req, _res, next) => {
-  if (!req.url.startsWith('/api')) {
+  if (process.env.VERCEL && !req.url.startsWith('/api')) {
     req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
   }
   next();
@@ -305,6 +306,12 @@ const violations: Violation[] = [
     details: 'Tab closed; delivered via Beacon API',
   },
 ];
+
+// --- PERSISTENCE (Firestore) ---
+// Loads state into the arrays above before each /api request and saves changes before responding.
+app.use(
+  createPersistence({ users, questions, exams, attempts, answers, violations, sessions }).middleware,
+);
 
 // --- AUTH MIDDLEWARE & HELPERS ---
 
